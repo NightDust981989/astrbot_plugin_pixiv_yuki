@@ -55,14 +55,20 @@ class MyPlugin(Star):
         valid_sizes = ["mini", "thumb", "small", "regular", "original"]
         return size if size in valid_sizes else self.default_size
 
+    # 关键修复：确保装饰器和方法参数完全匹配
     @filter.command("pixiv")
     async def pixiv(self, event: AstrMessageEvent):
+        # 强制校验 event 类型，避免参数错位
+        if not isinstance(event, AstrMessageEvent):
+            logger.error(f"参数类型错误，期望 AstrMessageEvent，实际：{type(event)}")
+            return
+        
         message_str = event.message_str.strip()
         args = message_str.split()
 
         # 帮助信息（纯文本）
         if len(args) < 2:
-            yield event.plain_result(
+            await event.reply(  # 改用 event.reply 替代 yield，更稳定
                 f"请按格式使用：\n"
                 f"/pixiv random [size]（可选size：mini/thumb/small/regular/original*当前默认：{self.default_size}）\n"
                 f"/pixiv illust [作品id]"
@@ -84,7 +90,7 @@ class MyPlugin(Star):
                     image_data = data["data"]
                     image_url = image_data["urls"].get(size, image_data["urls"][self.default_size])
                     
-                    # 第一步：发送文本信息（单独的plain消息）
+                    # 第一步：发送文本信息
                     text_msg = (
                         f"随机Pixiv图片\n"
                         f"标题：{image_data['title']}\n"
@@ -92,25 +98,25 @@ class MyPlugin(Star):
                         f"标签：{', '.join(image_data['tags'])}\n"
                         f"图片链接：{image_url}"
                     )
-                    yield event.plain_result(text_msg)
+                    await event.reply(text_msg)
                     
-                    # 第二步：单独发送图片URL（使用image_result）
+                    # 第二步：单独发送图片URL
                     if image_url.startswith(("http://", "https://")):
-                        yield event.image_result(image_url)
+                        await event.reply_image(image_url)  # 改用 event.reply_image 发送图片
                     else:
-                        yield event.plain_result("图片URL格式错误，无法发送图片")
+                        await event.reply("图片URL格式错误，无法发送图片")
                 else:
-                    yield event.plain_result(f"{data.get('message', '获取失败，返回数据异常')}")
+                    await event.reply(f"{data.get('message', '获取失败，返回数据异常')}")
 
             elif command_type == "illust":
                 # 作品查询逻辑：先返本文本，再发图片
                 if len(args) < 3:
-                    yield event.plain_result("请输入作品id：/pixiv illust [id]")
+                    await event.reply("请输入作品id：/pixiv illust [id]")
                     return
                     
                 tid = args[2]
                 if not tid.isdigit():
-                    yield event.plain_result("作品ID必须是数字")
+                    await event.reply("作品ID必须是数字")
                     return
                     
                 params = {"tid": tid, "proxy": self.proxy}  # 使用配置的 proxy
@@ -135,18 +141,18 @@ class MyPlugin(Star):
                         f"常规尺寸：{regular_url}\n"
                         f"缩略图：{image_data['urls']['thumb']}"
                     )
-                    yield event.plain_result(text_msg)
+                    await event.reply(text_msg)
                     
-                    # 第二步：单独发送常规尺寸图片（优先发这个，加载更快）
+                    # 第二步：单独发送常规尺寸图片
                     if regular_url.startswith(("http://", "https://")):
-                        yield event.image_result(regular_url)
+                        await event.reply_image(regular_url)
                     else:
-                        yield event.plain_result("图片URL格式错误，无法发送图片")
+                        await event.reply("图片URL格式错误，无法发送图片")
                 else:
-                    yield event.plain_result(f"{data.get('message', '作品不存在或包含R-18内容')}")
+                    await event.reply(f"{data.get('message', '作品不存在或包含R-18内容')}")
 
             else:
-                yield event.plain_result("指令类型错误 可选：random/illust")
+                await event.reply("指令类型错误 可选：random/illust")
 
         except httpx.HTTPStatusError as e:
             logger.error(f"HTTP请求错误 {e.response.status_code}：{str(e)}")
@@ -155,23 +161,23 @@ class MyPlugin(Star):
                 error_detail += " - API地址可能已变更或资源不存在"
             elif e.response.status_code == 403:
                 error_detail += " - 访问被拒绝，可能是IP限制"
-            yield event.plain_result(f"请求失败{error_detail}，请稍后再试")
+            await event.reply(f"请求失败{error_detail}，请稍后再试")
             
         except httpx.TimeoutException:
             logger.error("API请求超时")
-            yield event.plain_result("请求超时，请检查网络或稍后再试")
+            await event.reply("请求超时，请检查网络或稍后再试")
             
         except httpx.ConnectError:
             logger.error("API连接失败")
-            yield event.plain_result("连接失败，请检查网络或API服务是否可用")
+            await event.reply("连接失败，请检查网络或API服务是否可用")
             
         except KeyError as e:
             logger.error(f"数据解析错误，缺少字段：{str(e)}")
-            yield event.plain_result(f"数据解析错误，缺少字段：{str(e)}")
+            await event.reply(f"数据解析错误，缺少字段：{str(e)}")
             
         except Exception as e:
             logger.error(f"API请求失败：{str(e)}", exc_info=True)
-            yield event.plain_result(f"调用API出错：{str(e)[:50]}...")
+            await event.reply(f"调用API出错：{str(e)[:50]}...")
 
     async def terminate(self):
         """销毁方法：优雅清理资源"""
