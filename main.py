@@ -8,8 +8,8 @@ import httpx
 class MyPlugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)
-        self.random_api = "https://i.yuki.sh/api/recommend"
-        self.illust_api = "https://i.yuki.sh/api/illust"  
+        self.random_api = "https://pixiv.yuki.sh/api/recommend"
+        self.illust_api = "https://pixiv.yuki.sh/api/illust"  
         self.client: httpx.AsyncClient | None = None
         self.background_task: asyncio.Task | None = None
 
@@ -18,7 +18,7 @@ class MyPlugin(Star):
         # 配置请求头，模拟浏览器请求
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Referer": "https://i.yuki.sh/",
+            "Referer": "https://pixiv.yuki.sh/",
             "Accept": "application/json, text/plain, */*",
             "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"
         }
