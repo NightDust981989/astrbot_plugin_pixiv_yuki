@@ -3,6 +3,35 @@ from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
 import asyncio
 import httpx
+import traceback
+
+# 通用任务重启装饰器
+def restart_on_crash(max_restart_times: int = -1, restart_delay: float = 5.0):
+    def decorator(func):
+        async def wrapper(*args, **kwargs):
+            restart_count = 0
+            while max_restart_times == -1 or restart_count < max_restart_times:
+                try:
+                    await func(*args, **kwargs)
+                    break
+                except asyncio.CancelledError:
+                    logger.debug(f"任务 {func.__name__} 被主动取消，停止重启")
+                    break
+                except Exception as e:
+                    restart_count += 1
+                    error_msg = (
+                        f"任务 {func.__name__} 崩溃（第{restart_count}次）：{str(e)}\n"
+                        f"异常详情：{traceback.format_exc()}"
+                    )
+                    logger.error(error_msg)
+                    if max_restart_times != -1 and restart_count >= max_restart_times:
+                        logger.critical(f"任务 {func.__name__} 达到最大重启次数（{max_restart_times}次），停止重启")
+                        break
+                    await asyncio.sleep(restart_delay)
+                    logger.info(f"任务 {func.__name__} 将在 {restart_delay} 秒后重启（第{restart_count}次）")
+            return
+        return wrapper
+    return decorator
 
 @register("astrbot_plugin_pixiv_yuki", "NightDust981989 & xueelf", "pixiv第三方图床", "1.0.0")
 class MyPlugin(Star):
@@ -16,6 +45,8 @@ class MyPlugin(Star):
         # 定义域名替换规则
         self.old_domain = "pixiv.yuki.sh"
         self.new_domain = "i.yuki.sh"
+        # 心跳任务重启计数
+        self.heartbeat_restart_count = 0
 
     async def initialize(self):
         """初始化：创建复用的 httpx 异步客户端"""
@@ -29,21 +60,42 @@ class MyPlugin(Star):
         self.client = httpx.AsyncClient(
             timeout=httpx.Timeout(15.0),
             headers=headers,
-            verify=False,
             follow_redirects=False
         )
+        # 创建带重启机制的心跳任务
         self.background_task = asyncio.create_task(self._heartbeat())
-        logger.info("Pixiv图床插件已初始化")
+        logger.info("Pixiv图床插件已初始化，心跳任务启动")
 
+    @restart_on_crash(max_restart_times=-1, restart_delay=5.0)
     async def _heartbeat(self):
-        """后台心跳任务"""
+        """后台心跳任务（带异常重启）"""
+        logger.info("心跳任务已启动")
         while True:
             try:
-                await asyncio.sleep(300)
+                await asyncio.sleep(300)  # 5分钟心跳间隔
                 logger.debug("Pixiv插件心跳正常")
             except asyncio.CancelledError:
-                logger.debug("Pixiv插件心跳已终止")
-                break
+                # 主动取消时抛出，装饰器会捕获并停止重启
+                raise
+            except Exception as e:
+                # 单次心跳执行异常，仅打印日志，不终止任务
+                logger.error(f"心跳单次执行异常：{str(e)}", exc_info=True)
+                continue
+
+    @property
+    def heartbeat_task_status(self):
+        """返回心跳任务状态"""
+        if self.background_task is None:
+            return "not_started"
+        if self.background_task.done():
+            if self.background_task.cancelled():
+                return "cancelled"
+            try:
+                self.background_task.result()
+                return "finished"
+            except Exception:
+                return "exception"
+        return "running"
 
     def _validate_size(self, size: str) -> str:
         """验证图片尺寸参数"""
@@ -147,7 +199,7 @@ class MyPlugin(Star):
                     if new_original:
                         yield event.image_result(new_original)
                     else:
-                        yield event.plain_result("该作品为R-18内容，不支持显示")
+                        yield event.plain_result("该作品为R-18内容，违反平台规范")
                     
                 else:
                     yield event.plain_result(f"{data.get('message', '作品不存在')}")
