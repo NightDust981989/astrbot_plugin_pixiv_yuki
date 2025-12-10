@@ -8,8 +8,8 @@ import httpx
 class MyPlugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)
-        self.random_api = "https://pixiv.yuki.sh/api/recommend"
-        self.illust_api = "https://pixiv.yuki.sh/api/illust"
+        self.random_api = "https://i.yuki.sh/api/recommend"
+        self.illust_api = "https://i.yuki.sh/api/illust"
         # 定义 httpx 异步客户端
         self.client: httpx.AsyncClient | None = None
         self.background_task: asyncio.Task | None = None
@@ -44,7 +44,7 @@ class MyPlugin(Star):
         if len(args) < 2:
             yield event.plain_result(
                 f"Hello {user_name}~ 请按格式使用：\n"
-                "/pixiv random [size]（size：mini/thumb/small/regular/original）\n"
+                "/pixiv random [size]（可选size：mini/thumb/small/regular/original*默认）\n"
                 "/pixiv illust [作品id]"
             )
             return
