@@ -8,7 +8,7 @@ import httpx
 class MyPlugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)
-        # API地址仍用pixiv.yuki.sh
+        # API地址
         self.random_api = "https://pixiv.yuki.sh/api/recommend"
         self.illust_api = "https://pixiv.yuki.sh/api/illust"
         self.client: httpx.AsyncClient | None = None
@@ -21,7 +21,7 @@ class MyPlugin(Star):
         """初始化：创建复用的 httpx 异步客户端"""
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Referer": "https://pixiv.yuki.sh/",  # 请求时仍用原域名
+            "Referer": "https://pixiv.yuki.sh/",  
             "Accept": "application/json, text/plain, */*",
             "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"
         }
@@ -76,7 +76,7 @@ class MyPlugin(Star):
         try:
             if command_type == "random":
                 size = self._validate_size(args[2] if len(args) >= 3 else "original")
-                params = {"type": "json", "proxy": "pixiv.yuki.sh"}  # 请求参数仍用原域名
+                params = {"type": "json", "proxy": "pixiv.yuki.sh"} 
                 
                 resp = await self.client.get(self.random_api, params=params)
                 resp.raise_for_status()
@@ -84,9 +84,9 @@ class MyPlugin(Star):
                 
                 if data.get("success") and data.get("data"):
                     image_data = data["data"]
-                    # 先获取原URL，再替换域名
+                    
                     original_url = image_data["urls"].get(size, image_data["urls"]["original"])
-                    new_url = self._replace_domain(original_url)  # 核心：替换域名
+                    new_url = self._replace_domain(original_url)  # 替换域名
                     
                     basic_info = (
                         f"随机Pixiv图片\n"
@@ -112,24 +112,19 @@ class MyPlugin(Star):
                     yield event.plain_result("作品ID必须是数字")
                     return
                     
-                params = {"tid": tid, "proxy": "pixiv.yuki.sh"}  # 请求参数仍用原域名
+                params = {"tid": tid, "proxy": "pixiv.yuki.sh"}  
                 resp = await self.client.get(self.illust_api, params=params)
                 resp.raise_for_status()
                 data = resp.json()
                 
                 if data.get("success") and data.get("data"):
                     image_data = data["data"]
-                    # 先获取原URL，再批量替换域名
-                    original_regular = image_data["urls"]["regular"]
+                    # 先获取原URL，再替换域名
                     original_original = image_data["urls"]["original"]
-                    original_thumb = image_data["urls"]["thumb"]
                     
-                    # 核心：替换所有URL的域名
-                    new_regular = self._replace_domain(original_regular)
                     new_original = self._replace_domain(original_original)
-                    new_thumb = self._replace_domain(original_thumb)
                     
-                    # 1. 输出作品基础信息
+                    # 输出作品基础信息
                     basic_info = (
                         f"作品详情 (ID: {tid})\n"
                         f"标题：{image_data['title']}\n"
@@ -138,7 +133,7 @@ class MyPlugin(Star):
                     )
                     yield event.plain_result(basic_info)
                     
-                    # 2. 输出替换后的URL
+                    #  输出替换后的URL
                     yield event.image_result(new_original)
                     
                 else:
