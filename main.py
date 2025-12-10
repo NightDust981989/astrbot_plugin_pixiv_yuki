@@ -123,23 +123,23 @@ class MyPlugin(Star):
                     
                     # 适配返回数据结构解析字段
                     # 处理URL（兼容null的情况）
-                    original_url = image_data["urls"]["original"]
-                    new_original = self._replace_domain(original_url)
+                    urls = image_data.get("urls", {})
+                    original_url = urls.get("original")
                     
-                    # 处理时间字段（格式化显示）
-                    create_date = image_data.get("createDate", "未知")
-                    upload_date = image_data.get("uploadDate", "未知")
+                    new_original = self._replace_domain(original_url) if original_url else None
                     
-                    # 处理描述字段（兼容HTML标签）
+                    
+                    # 处理描述字段
                     description = image_data.get("description", "无")
                     
                     # 输出作品基础信息
+                    user = image_data.get("user", {})
                     basic_info = (
                         f"作品详情 (ID: {image_data['id']})\n"
                         f"标题：{image_data['title']}\n"
-                        f"作者：{image_data['user']['name']} (ID: {image_data['user']['id']} | 账号：{image_data['user']['account']})\n"
+                        f"作者：{user.get('name', '未知')} (ID: {user.get('id', '未知')} | 账号：{user.get('account', '未知')})\n"
                         f"描述：{description}\n"
-                        f"标签：{', '.join(image_data['tags'])}"
+                        f"标签：{', '.join(image_data.get('tags', []))}"
                     )
                     yield event.plain_result(basic_info)
                     
@@ -150,7 +150,7 @@ class MyPlugin(Star):
                         yield event.plain_result("该作品为R-18内容，不支持显示")
                     
                 else:
-                    yield event.plain_result(f"{data.get('message', '作品不存在或包含R-18内容')}")
+                    yield event.plain_result(f"{data.get('message', '作品不存在')}")
 
             else:
                 yield event.plain_result("指令类型错误 可选：random/illust")
