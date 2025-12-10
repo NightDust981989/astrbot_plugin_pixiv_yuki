@@ -86,7 +86,7 @@ class MyPlugin(Star):
                         f"标题：{image_data['title']}\n"
                         f"作者：{image_data['user']['name']} (ID: {image_data['user']['id']})\n"
                         f"标签：{', '.join(image_data['tags'])}\n"
-                        f"图片链接：{image_url}"
+                        
                     )
                     yield event.plain_result(reply_msg)
                 else:
@@ -123,9 +123,7 @@ class MyPlugin(Star):
                         f"作者：{image_data['user']['name']} (ID: {image_data['user']['id']})\n"
                         f"创建时间：{image_data['createDate'].replace('T', ' ').replace('.000Z', '')}\n"
                         f"标签：{', '.join(image_data['tags'])}\n\n"
-                        f"原图：{image_data['urls']['original']}\n"
-                        f"常规尺寸：{image_data['urls']['regular']}\n"
-                        f"缩略图：{image_data['urls']['thumb']}"
+                    
                     )
                     yield event.plain_result(reply_msg)
                 else:
