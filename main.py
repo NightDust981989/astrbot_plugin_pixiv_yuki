@@ -107,34 +107,47 @@ class MyPlugin(Star):
                     yield event.plain_result("请输入作品id：/pixiv illust [id]")
                     return
                     
-                tid = args[2]
-                if not tid.isdigit():
+                id = args[2]
+                if not id.isdigit():
                     yield event.plain_result("作品ID必须是数字")
                     return
                     
-                params = {"tid": tid, "proxy": "pixiv.yuki.sh"}  
+                # 修复：删除多余的host参数，仅保留id参数
+                params = {"id": id}  
                 resp = await self.client.get(self.illust_api, params=params)
                 resp.raise_for_status()
                 data = resp.json()
                 
                 if data.get("success") and data.get("data"):
                     image_data = data["data"]
-                    # 先获取原URL，再替换域名
-                    original_original = image_data["urls"]["original"]
                     
-                    new_original = self._replace_domain(original_original)
+                    # 适配返回数据结构解析字段
+                    # 处理URL（兼容null的情况）
+                    original_url = image_data["urls"]["original"]
+                    new_original = self._replace_domain(original_url)
+                    
+                    # 处理时间字段（格式化显示）
+                    create_date = image_data.get("createDate", "未知")
+                    upload_date = image_data.get("uploadDate", "未知")
+                    
+                    # 处理描述字段（兼容HTML标签）
+                    description = image_data.get("description", "无")
                     
                     # 输出作品基础信息
                     basic_info = (
-                        f"作品详情 (ID: {tid})\n"
+                        f"作品详情 (ID: {image_data['id']})\n"
                         f"标题：{image_data['title']}\n"
-                        f"作者：{image_data['user']['name']} (ID: {image_data['user']['id']})\n"
+                        f"作者：{image_data['user']['name']} (ID: {image_data['user']['id']} | 账号：{image_data['user']['account']})\n"
+                        f"描述：{description}\n"
                         f"标签：{', '.join(image_data['tags'])}"
                     )
                     yield event.plain_result(basic_info)
                     
-                    #  输出替换后的URL
-                    yield event.image_result(new_original)
+                    # 仅当图片URL存在时发送图片
+                    if new_original:
+                        yield event.image_result(new_original)
+                    else:
+                        yield event.plain_result("该作品为R-18内容，不支持显示")
                     
                 else:
                     yield event.plain_result(f"{data.get('message', '作品不存在或包含R-18内容')}")
@@ -149,6 +162,8 @@ class MyPlugin(Star):
                 error_detail += " - API地址可能已变更或资源不存在"
             elif e.response.status_code == 403:
                 error_detail += " - 访问被拒绝，可能是IP限制"
+            elif e.response.status_code == 400:
+                error_detail += " - 找不到指定id的图片"
             yield event.plain_result(f"请求失败{error_detail}，请稍后再试")
             
         except httpx.TimeoutException:
