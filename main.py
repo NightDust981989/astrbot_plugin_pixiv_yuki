@@ -8,17 +8,25 @@ import httpx
 class MyPlugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)
-        # 统一使用 pixiv.yuki.sh 域名
-        self.random_api = "https://pixiv.yuki.sh/api/recommend"
-        self.illust_api = "https://pixiv.yuki.sh/api/illust"
+        # 基础 API 地址（域名从配置读取）
+        self.random_api = "https://{proxy}/api/recommend"
+        self.illust_api = "https://{proxy}/api/illust"
         self.client: httpx.AsyncClient | None = None
         self.background_task: asyncio.Task | None = None
+        
+        # 从配置读取参数（默认值兜底）
+        self.proxy = self.context.config.get("proxy", "pixiv.yuki.sh")  # 代理域名
+        self.default_size = self.context.config.get("default_size", "original")  # 默认图片尺寸
 
     async def initialize(self):
-        """初始化：创建复用的 httpx 异步客户端"""
+        """初始化：创建复用的 httpx 异步客户端，使用配置的 proxy"""
+        # 替换 API 地址中的 proxy 占位符
+        self.random_api = self.random_api.format(proxy=self.proxy)
+        self.illust_api = self.illust_api.format(proxy=self.proxy)
+        
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Referer": "https://pixiv.yuki.sh/",
+            "Referer": f"https://{self.proxy}/",  # 适配配置的 proxy
             "Accept": "application/json, text/plain, */*",
             "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"
         }
@@ -30,22 +38,22 @@ class MyPlugin(Star):
             follow_redirects=False
         )
         self.background_task = asyncio.create_task(self._heartbeat())
-        logger.info("Pixiv图床插件已初始化")
+        logger.info(f"Pixiv图床插件已初始化 | 代理域名：{self.proxy} | 默认尺寸：{self.default_size}")
 
     async def _heartbeat(self):
         """后台心跳任务"""
         while True:
             try:
                 await asyncio.sleep(300)
-                logger.debug("Pixiv插件心跳正常")
+                logger.debug(f"Pixiv插件心跳正常 | 代理：{self.proxy}")
             except asyncio.CancelledError:
                 logger.debug("Pixiv插件心跳已终止")
                 break
 
     def _validate_size(self, size: str) -> str:
-        """验证图片尺寸参数"""
+        """验证图片尺寸参数（优先使用用户输入，否则用配置的默认值）"""
         valid_sizes = ["mini", "thumb", "small", "regular", "original"]
-        return size if size in valid_sizes else "original"
+        return size if size in valid_sizes else self.default_size
 
     @filter.command("pixiv")
     async def pixiv(self, event: AstrMessageEvent):
@@ -55,9 +63,9 @@ class MyPlugin(Star):
         # 帮助信息（纯文本）
         if len(args) < 2:
             yield event.plain_result(
-                "请按格式使用：\n"
-                "/pixiv random [size]（可选size：mini/thumb/small/regular/original*默认）\n"
-                "/pixiv illust [作品id]"
+                f"请按格式使用：\n"
+                f"/pixiv random [size]（可选size：mini/thumb/small/regular/original*当前默认：{self.default_size}）\n"
+                f"/pixiv illust [作品id]"
             )
             return
 
@@ -65,8 +73,8 @@ class MyPlugin(Star):
         try:
             if command_type == "random":
                 # 随机图片逻辑：先返本文本信息，再单独发图片URL
-                size = self._validate_size(args[2] if len(args) >= 3 else "original")
-                params = {"type": "json", "proxy": "pixiv.yuki.sh"}
+                size = self._validate_size(args[2] if len(args) >= 3 else "")
+                params = {"type": "json", "proxy": self.proxy}  # 使用配置的 proxy
                 
                 resp = await self.client.get(self.random_api, params=params)
                 resp.raise_for_status()
@@ -74,7 +82,7 @@ class MyPlugin(Star):
                 
                 if data.get("success") and data.get("data"):
                     image_data = data["data"]
-                    image_url = image_data["urls"].get(size, image_data["urls"]["original"])
+                    image_url = image_data["urls"].get(size, image_data["urls"][self.default_size])
                     
                     # 第一步：发送文本信息（单独的plain消息）
                     text_msg = (
@@ -105,7 +113,7 @@ class MyPlugin(Star):
                     yield event.plain_result("作品ID必须是数字")
                     return
                     
-                params = {"tid": tid, "proxy": "pixiv.yuki.sh"}
+                params = {"tid": tid, "proxy": self.proxy}  # 使用配置的 proxy
                 resp = await self.client.get(self.illust_api, params=params)
                 resp.raise_for_status()
                 data = resp.json()

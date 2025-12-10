@@ -1,0 +1,16 @@
+{
+  "proxy": {
+    "description": "Pixiv第三方图床代理域名",
+    "type": "string",
+    "hint": "填写不带https的域名，例如 pixiv.yuki.sh 或 i.yuki.sh",
+    "obvious_hint": true,
+    "default": "pixiv.yuki.sh"
+  },
+  "default_size": {
+    "description": "默认图片尺寸",
+    "type": "string",
+    "hint": "random指令未指定size时使用的默认尺寸，优先选regular/original",
+    "options": ["mini", "thumb", "small", "regular", "original"],
+    "default": "original"
+  }
+}
