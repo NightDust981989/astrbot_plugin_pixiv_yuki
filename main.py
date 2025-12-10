@@ -87,6 +87,7 @@ class MyPlugin(Star):
                         f"图片链接：{image_url}"
                     )
                     yield event.plain_result(reply_text)
+                    yield event.plain_result("image_url")
                 else:
                     error_text = f"{data.get('message', '获取失败，返回数据异常')}"
                     yield event.plain_result(error_text)
