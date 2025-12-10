@@ -162,7 +162,7 @@ class MyPlugin(Star):
                 error_detail += " - API地址可能已变更或资源不存在"
             elif e.response.status_code == 403:
                 error_detail += " - 访问被拒绝，可能是IP限制"
-            elif e.response.status_code == 400:
+            elif e.response.status_code == 401:
                 error_detail += " - 找不到指定id的图片"
             yield event.plain_result(f"请求失败{error_detail}，请稍后再试")
             
