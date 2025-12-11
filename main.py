@@ -16,6 +16,7 @@ class MyPlugin(Star):
         # 定义域名替换规则
         self.old_domain = "pixiv.yuki.sh"
         self.new_domain = "i.yuki.sh"
+        self.heartbeat_url = "https://yuki.sh"
 
     async def initialize(self):
         """初始化：创建复用的 httpx 异步客户端"""
@@ -35,11 +36,28 @@ class MyPlugin(Star):
         logger.info("Pixiv图床插件已初始化")
 
     async def _heartbeat(self):
-        """后台心跳任务"""
+        """后台心跳任务，检测yuki.sh服务可用性"""
         while True:
             try:
                 await asyncio.sleep(300)
-                logger.debug("Pixiv插件心跳正常")
+                # 心跳检测
+                try:
+                    # 使用HEAD请求减少数据传输
+                    resp = await self.client.head(
+                        self.heartbeat_url,
+                        timeout=httpx.Timeout(10.0)
+                    )
+                    resp.raise_for_status()
+                    logger.debug(f"Pixiv插件心跳正常")
+                except httpx.HTTPStatusError as e:
+                    logger.warning(f"Pixiv插件心跳检测异常：yuki.sh 返回状态码 {e.response.status_code}")
+                except httpx.TimeoutException:
+                    logger.warning("Pixiv插件心跳检测超时：连接yuki.sh超时")
+                except httpx.ConnectError:
+                    logger.warning("Pixiv插件心跳检测失败：无法连接到yuki.sh")
+                except Exception as e:
+                    logger.warning(f"Pixiv插件心跳检测异常：{str(e)}")
+                    
             except asyncio.CancelledError:
                 logger.debug("Pixiv插件心跳已终止")
                 break
