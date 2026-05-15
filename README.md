@@ -1,9 +1,11 @@
-# Pixiv第三方图床插件（AstrBot）
+# AstrBot 第三方 Pixiv 图床插件
 适用于 AstrBot 的 Pixiv 第三方图床调用插件，支持随机获取 Pixiv 图片、根据作品 ID 查询图片链接。
 
 ## 功能特性
 - 随机获取 Pixiv 图片，支持指定图片尺寸（mini/thumb/small/regular/original）
 - 根据作品 ID 查询 Pixiv 作品详情及多尺寸图片链接
+- 支持 LLM 工具调用（Function Calling），可通过自然语言让 AI 自动发图
+- 可配置随机图片是否显示作品信息（标题、作者、标签）
 
 ## 安装说明
 可在插件商店直接下载安装，或在astrbot/data/plugins目录手动下载解压
@@ -20,6 +22,22 @@
 | `/pixiv random` | 获取随机 Pixiv 图片（默认原图尺寸） | `/pixiv random` |
 | `/pixiv random [size]` | 获取指定尺寸的随机图片 | `/pixiv random regular` |
 | `/pixiv illust [作品ID]` | 根据 ID 查询作品详情及图片链接 | `/pixiv illust 118908797` |
+
+### 自然语言调用（Function Calling）
+支持 LLM 工具调用，用户可通过自然语言与 AI 交互，AI 会自动识别意图并调用对应工具：
+
+- "来张pixiv图片" → 自动调用 `pixiv_random` 获取随机图片
+- "帮我看看pixiv作品118908797" → 自动调用 `pixiv_illust` 查询作品详情
+
+使用 `/tool ls` 可查看已注册的工具列表。
+
+### 插件配置
+在 AstrBot 管理面板的插件配置页面可调整以下选项：
+
+| 配置项 | 类型 | 默认值 | 说明 |
+|--------|------|--------|------|
+| `show_image_info` | bool | `true` | 随机图片是否显示作品信息（标题、作者、标签） |
+| `default_image_size` | string | `original` | 随机图片默认尺寸，可选：mini / thumb / small / regular / original |
 
 ### 尺寸参数说明
 | 参数 | 尺寸说明 |
@@ -68,17 +86,12 @@
 - API 返回数据格式变更，需更新插件适配新的返回结构
 - 作品包含 R-18 内容可能导致返回数据异常
 
-## 插件信息
-- 插件名称：astrbot_plugin_pixiv_yuki
-- 开发者：NightDust981989 & xueelf
-- 版本：1.0.0
-- 依赖：httpx
-
 ## 免责声明
-- 本插件仅用于学习和交流，请勿用于商业用途
+- 本插件遵循和AstrBot相同的许可证
 - 图片资源均来自 Pixiv 第三方图床，版权归原作者所有
 - 使用本插件需遵守相关法律法规及平台规则
 
 ## 感谢
 - Whisky-Jay
 - shenshen
+- xueelf

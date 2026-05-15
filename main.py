@@ -1,13 +1,15 @@
 from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
 from astrbot.api.star import Context, Star, register
-from astrbot.api import logger
+from astrbot.api import logger, AstrBotConfig
 import asyncio
 import httpx
+from typing import AsyncGenerator
 
-@register("astrbot_plugin_pixiv_yuki", "NightDust981989 & xueelf", "pixiv第三方图床", "1.0.0")
+@register("astrbot_plugin_pixiv_yuki", "NightDust981989 & xueelf", "pixiv第三方图床", "1.1.0","https://github.com/NightDust981989/astrbot_plugin_pixiv_yuki")
 class MyPlugin(Star):
-    def __init__(self, context: Context):
+    def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
+        self.config = config
         # API地址
         self.random_api = "https://pixiv.yuki.sh/api/recommend"
         self.illust_api = "https://pixiv.yuki.sh/api/illust"
@@ -92,7 +94,7 @@ class MyPlugin(Star):
         command_type = args[1]
         try:
             if command_type == "random":
-                size = self._validate_size(args[2] if len(args) >= 3 else "original")
+                size = self._validate_size(args[2] if len(args) >= 3 else self.config.get("default_image_size", "original"))
                 params = {"type": "json", "proxy": "pixiv.yuki.sh"} 
                 
                 resp = await self.client.get(self.random_api, params=params)
@@ -105,16 +107,17 @@ class MyPlugin(Star):
                     original_url = image_data["urls"].get(size, image_data["urls"]["original"])
                     new_url = self._replace_domain(original_url)  # 替换域名
                     
-                    basic_info = (
-                        f"随机Pixiv图片\n"
-                        f"标题：{image_data['title']}\n"
-                        f"作者：{image_data['user']['name']} (ID: {image_data['user']['id']})\n"
-                        f"标签：{', '.join(image_data['tags'])}"
-                    )
-                    yield event.plain_result(basic_info)
-                    
+                    if self.config.get("show_image_info", True):
+                        basic_info = (
+                            f"随机Pixiv图片\n"
+                            f"标题：{image_data['title']}\n"
+                            f"作者：{image_data['user']['name']} (ID: {image_data['user']['id']})\n"
+                            f"标签：{', '.join(image_data['tags'])}"
+                        )
+                        yield event.plain_result(basic_info)
+
                     yield event.image_result(new_url)
-                    
+
                 else:
                     error_text = f"{data.get('message', '获取失败，返回数据异常')}"
                     yield event.plain_result(error_text)
@@ -192,6 +195,100 @@ class MyPlugin(Star):
         except KeyError as e:
             yield event.plain_result(f"数据解析错误，缺少字段：{str(e)}")
             
+        except Exception as e:
+            logger.error(f"API请求失败：{str(e)}", exc_info=True)
+            yield event.plain_result(f"调用API出错：{str(e)[:50]}...")
+
+    @filter.llm_tool(name="pixiv_random")
+    async def pixiv_random(self, event: AstrMessageEvent, size: str = "") -> AsyncGenerator[MessageEventResult, None]:
+        '''获取一张随机的Pixiv图片。
+
+        Args:
+            size(string): 图片尺寸，可选值：mini(迷你缩略图)、thumb(缩略图)、small(小图)、regular(常规图)、original(原图)。留空则使用配置中的默认尺寸
+        '''
+        size = self._validate_size(size) if size else self.config.get("default_image_size", "original")
+        try:
+            params = {"type": "json", "proxy": "pixiv.yuki.sh"}
+            resp = await self.client.get(self.random_api, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+
+            if data.get("success") and data.get("data"):
+                image_data = data["data"]
+                original_url = image_data["urls"].get(size, image_data["urls"]["original"])
+                new_url = self._replace_domain(original_url)
+
+                if self.config.get("show_image_info", True):
+                    basic_info = (
+                        f"随机Pixiv图片\n"
+                        f"标题：{image_data['title']}\n"
+                        f"作者：{image_data['user']['name']} (ID: {image_data['user']['id']})\n"
+                        f"标签：{', '.join(image_data['tags'])}"
+                    )
+                    yield event.plain_result(basic_info)
+                yield event.image_result(new_url)
+            else:
+                yield event.plain_result(f"{data.get('message', '获取失败，返回数据异常')}")
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP请求错误 {e.response.status_code}：{str(e)}")
+            yield event.plain_result(f"请求失败（状态码：{e.response.status_code}），请稍后再试")
+        except httpx.TimeoutException:
+            yield event.plain_result("请求超时，请稍后再试")
+        except httpx.ConnectError:
+            yield event.plain_result("连接失败，请检查网络或API服务是否可用")
+        except Exception as e:
+            logger.error(f"API请求失败：{str(e)}", exc_info=True)
+            yield event.plain_result(f"调用API出错：{str(e)[:50]}...")
+
+    @filter.llm_tool(name="pixiv_illust")
+    async def pixiv_illust(self, event: AstrMessageEvent, id: str) -> AsyncGenerator[MessageEventResult, None]:
+        '''根据作品ID查询Pixiv作品详情并发送图片。
+
+        Args:
+            id(string): Pixiv作品ID，纯数字
+        '''
+        if not id.isdigit():
+            yield event.plain_result("作品ID必须是数字")
+            return
+
+        try:
+            params = {"id": id}
+            resp = await self.client.get(self.illust_api, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+
+            if data.get("success") and data.get("data"):
+                image_data = data["data"]
+                urls = image_data.get("urls", {})
+                original_url = urls.get("original")
+                new_original = self._replace_domain(original_url) if original_url else None
+
+                description = image_data.get("description", "无")
+                user = image_data.get("user", {})
+                basic_info = (
+                    f"作品详情 (ID: {image_data['id']})\n"
+                    f"标题：{image_data['title']}\n"
+                    f"作者：{user.get('name', '未知')} (ID: {user.get('id', '未知')} | 账号：{user.get('account', '未知')})\n"
+                    f"描述：{description}\n"
+                    f"标签：{', '.join(image_data.get('tags', []))}"
+                )
+                yield event.plain_result(basic_info)
+
+                if new_original:
+                    yield event.image_result(new_original)
+                else:
+                    yield event.plain_result("该作品为R-18内容，违法平台规则")
+            else:
+                yield event.plain_result(f"{data.get('message', '作品不存在')}")
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP请求错误 {e.response.status_code}：{str(e)}")
+            yield event.plain_result(f"请求失败（状态码：{e.response.status_code}），请稍后再试")
+        except httpx.TimeoutException:
+            yield event.plain_result("请求超时，请稍后再试")
+        except httpx.ConnectError:
+            yield event.plain_result("连接失败，请检查网络或API服务是否可用")
         except Exception as e:
             logger.error(f"API请求失败：{str(e)}", exc_info=True)
             yield event.plain_result(f"调用API出错：{str(e)[:50]}...")

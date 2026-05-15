@@ -1,0 +1,13 @@
+{
+  "show_image_info": {
+    "description": "随机图片是否显示作品信息（标题、作者、标签）",
+    "type": "bool",
+    "default": true
+  },
+  "default_image_size": {
+    "description": "随机图片默认尺寸",
+    "type": "string",
+    "default": "original",
+    "options": ["mini", "thumb", "small", "regular", "original"]
+  }
+}
