@@ -70,11 +70,6 @@ class MyPlugin(Star):
         return size if size in valid_sizes else "original"
 
     def _replace_domain(self, url: str) -> str:
-        """统一替换URL中的域名：pixiv.yuki.sh → i.yuki.sh"""
-        if self.old_domain in url:
-            new_url = url.replace(self.old_domain, self.new_domain)
-            logger.debug(f"URL域名替换：{url} → {new_url}")
-            return new_url
         return url
 
     @filter.command("pixiv")
