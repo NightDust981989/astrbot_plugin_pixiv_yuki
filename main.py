@@ -4,8 +4,10 @@ from astrbot.api import logger, AstrBotConfig
 import asyncio
 import httpx
 from typing import AsyncGenerator
+import tempfile
+import os
 
-@register("astrbot_plugin_pixiv_yuki", "NightDust981989 & xueelf", "pixiv第三方图床", "1.1.0","https://github.com/NightDust981989/astrbot_plugin_pixiv_yuki")
+@register("astrbot_plugin_pixiv_yuki", "NightDust981989 & xueelf", "pixiv第三方图床", "1.2.0","https://github.com/NightDust981989/astrbot_plugin_pixiv_yuki")
 class MyPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -15,16 +17,13 @@ class MyPlugin(Star):
         self.illust_api = "https://pixiv.yuki.sh/api/illust"
         self.client: httpx.AsyncClient | None = None
         self.background_task: asyncio.Task | None = None
-        # 定义域名替换规则
-        self.old_domain = "pixiv.yuki.sh"
-        self.new_domain = "i.yuki.sh"
         self.heartbeat_url = "https://blog.yuki.sh"
 
     async def initialize(self):
         """初始化：创建复用的 httpx 异步客户端"""
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Referer": f"https://{self.old_domain}/",  
+            "Referer": "https://pixiv.yuki.sh/",  
             "Accept": "application/json, text/plain, */*",
             "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"
         }
@@ -69,13 +68,38 @@ class MyPlugin(Star):
         valid_sizes = ["mini", "thumb", "small", "regular", "original"]
         return size if size in valid_sizes else "original"
 
-    def _replace_domain(self, url: str) -> str:
-        """统一替换URL中的域名：pixiv.yuki.sh → i.yuki.sh"""
-        if self.old_domain in url:
-            new_url = url.replace(self.old_domain, self.new_domain)
-            logger.debug(f"URL域名替换：{url} → {new_url}")
-            return new_url
-        return url
+    async def _download_image(self, url: str) -> str | None:
+        """下载图片到本地临时文件，返回文件路径"""
+        try:
+            resp = await self.client.get(url)
+            resp.raise_for_status()
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp:
+                tmp.write(resp.content)
+                tmp_path = tmp.name
+            logger.debug(f"图片已保存至临时文件：{tmp_path}")
+            return tmp_path
+        except Exception as e:
+            logger.error(f"图片下载失败 [{url}]: {e}")
+            return None
+
+    async def _delete_file(self, path: str):
+        """延迟删除临时文件"""
+        try:
+            await asyncio.sleep(2)
+            if os.path.exists(path):
+                os.unlink(path)
+                logger.debug(f"已删除临时文件：{path}")
+        except Exception as e:
+            logger.warning(f"删除临时文件失败：{e}")
+
+    async def _send_image(self, url: str, event: AstrMessageEvent):
+        """下载图片到本地并发送，自动清理临时文件"""
+        img_path = await self._download_image(url)
+        if img_path:
+            yield event.image_result(img_path)
+            asyncio.create_task(self._delete_file(img_path))
+        else:
+            yield event.plain_result("图片下载失败，请稍后重试")
 
     @filter.command("pixiv")
     async def pixiv(self, event: AstrMessageEvent):
@@ -95,7 +119,7 @@ class MyPlugin(Star):
         try:
             if command_type == "random":
                 size = self._validate_size(args[2] if len(args) >= 3 else self.config.get("default_image_size", "original"))
-                params = {"type": "json", "proxy": "pixiv.yuki.sh"} 
+                params = {"type": "json"} 
                 
                 resp = await self.client.get(self.random_api, params=params)
                 resp.raise_for_status()
@@ -105,7 +129,6 @@ class MyPlugin(Star):
                     image_data = data["data"]
                     
                     original_url = image_data["urls"].get(size, image_data["urls"]["original"])
-                    new_url = self._replace_domain(original_url)  # 替换域名
                     
                     if self.config.get("show_image_info", True):
                         basic_info = (
@@ -116,7 +139,8 @@ class MyPlugin(Star):
                         )
                         yield event.plain_result(basic_info)
 
-                    yield event.image_result(new_url)
+                    async for result in self._send_image(original_url, event):
+                        yield result
 
                 else:
                     error_text = f"{data.get('message', '获取失败，返回数据异常')}"
@@ -146,7 +170,7 @@ class MyPlugin(Star):
                     urls = image_data.get("urls", {})
                     original_url = urls.get("original")
                     
-                    new_original = self._replace_domain(original_url) if original_url else None
+                    new_original = original_url  # 直接使用 API 返回的 URL
                     
                     
                     # 处理描述字段
@@ -165,7 +189,8 @@ class MyPlugin(Star):
                     
                     # 仅当图片URL存在时发送图片
                     if new_original:
-                        yield event.image_result(new_original)
+                        async for result in self._send_image(new_original, event):
+                            yield result
                     else:
                         yield event.plain_result("该作品为R-18内容，违法平台规则")
                     
@@ -208,7 +233,7 @@ class MyPlugin(Star):
         '''
         size = self._validate_size(size) if size else self.config.get("default_image_size", "original")
         try:
-            params = {"type": "json", "proxy": "pixiv.yuki.sh"}
+            params = {"type": "json"}
             resp = await self.client.get(self.random_api, params=params)
             resp.raise_for_status()
             data = resp.json()
@@ -216,7 +241,7 @@ class MyPlugin(Star):
             if data.get("success") and data.get("data"):
                 image_data = data["data"]
                 original_url = image_data["urls"].get(size, image_data["urls"]["original"])
-                new_url = self._replace_domain(original_url)
+                # 直接使用 API 返回的 URL，无需替换域名
 
                 if self.config.get("show_image_info", True):
                     basic_info = (
@@ -226,7 +251,8 @@ class MyPlugin(Star):
                         f"标签：{', '.join(image_data['tags'])}"
                     )
                     yield event.plain_result(basic_info)
-                yield event.image_result(new_url)
+                async for result in self._send_image(original_url, event):
+                    yield result
             else:
                 yield event.plain_result(f"{data.get('message', '获取失败，返回数据异常')}")
 
@@ -262,7 +288,7 @@ class MyPlugin(Star):
                 image_data = data["data"]
                 urls = image_data.get("urls", {})
                 original_url = urls.get("original")
-                new_original = self._replace_domain(original_url) if original_url else None
+                new_original = original_url  # 直接使用 API 返回的 URL
 
                 description = image_data.get("description", "无")
                 user = image_data.get("user", {})
@@ -276,7 +302,8 @@ class MyPlugin(Star):
                 yield event.plain_result(basic_info)
 
                 if new_original:
-                    yield event.image_result(new_original)
+                    async for result in self._send_image(new_original, event):
+                        yield result
                 else:
                     yield event.plain_result("该作品为R-18内容，违法平台规则")
             else:
