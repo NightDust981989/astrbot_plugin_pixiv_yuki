@@ -2,7 +2,7 @@
 适用于 AstrBot 的 Pixiv 第三方图床调用插件，支持随机获取 Pixiv 图片、根据作品 ID 查询图片链接。
 
 ## 功能特性
-- 随机获取 Pixiv 图片，支持指定图片尺寸（mini/thumb/small/regular/original）
+- 随机获取 Pixiv 图片
 - 根据作品 ID 查询 Pixiv 作品详情及多尺寸图片链接
 - 支持 LLM 工具调用（Function Calling），可通过自然语言让 AI 自动发图
 - 可配置随机图片是否显示作品信息（标题、作者、标签）
@@ -20,7 +20,6 @@
 | 指令 | 说明 | 示例 |
 |------|------|------|
 | `/pixiv random` | 获取随机 Pixiv 图片（默认原图尺寸） | `/pixiv random` |
-| `/pixiv random [size]` | 获取指定尺寸的随机图片 | `/pixiv random regular` |
 | `/pixiv illust [作品ID]` | 根据 ID 查询作品详情及图片链接 | `/pixiv illust 118908797` |
 
 ### 自然语言调用（Function Calling）
@@ -37,16 +36,9 @@
 | 配置项 | 类型 | 默认值 | 说明 |
 |--------|------|--------|------|
 | `show_image_info` | bool | `true` | 随机图片是否显示作品信息（标题、作者、标签） |
-| `default_image_size` | string | `original` | 随机图片默认尺寸，可选：mini / thumb / small / regular / original |
+| `default_image_size` | string | `original` | 随机图片尺寸 |
 
-### 尺寸参数说明
-| 参数 | 尺寸说明 |
-|------|----------|
-| mini | 迷你缩略图 |
-| thumb | 缩略图 |
-| small | 小尺寸图 |
-| regular | 常规尺寸图 |
-| original | 原图（默认） |
+
 
 ## 返回示例
 ### 随机图片返回
